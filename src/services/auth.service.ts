@@ -6,7 +6,7 @@ import User, { UserDocument } from '../models/User.js';
 import ApiError from '../utils/ApiError.js';
 
 const OTP_EXPIRY_MS       = 10 * 60 * 1000; // 10 minutes
-const RESEND_COOLDOWN_SEC = 60;
+const RESEND_COOLDOWN_SEC = 30;
 const MAX_ACTIVE_SESSIONS = 3;
 const MAX_FAILED_ATTEMPTS = 5;
 const BLOCK_DURATION_MS   = 15 * 60 * 1000;
