@@ -1,0 +1,277 @@
+# Chargezio API — REST Client test file
+# Install VS Code extension: REST Client (humao.rest-client)
+# Click "Send Request" above any ### block to run it.
+#
+# FLOW:
+#   1. Health check
+#   2. Send OTP → response has { expiresAt } (use for countdown timer)
+#   3. Verify OTP → paste token below
+#   4. Top up wallet → ₹500
+#   5. Browse nearby stations → grab a stationId + chargerId
+#   6. Start session → grab sessionId
+#   7. Poll GET session every few seconds to see live data
+#   8. Stop session → wallet deducted, transaction created
+
+@base = http://localhost:5000
+@phone = +919876543210
+
+# ─── paste JWT here after verify-otp ────────────────────────────────────────
+@token = PASTE_TOKEN_HERE
+
+# ─── paste IDs from responses ────────────────────────────────────────────────
+@vehicleId       = PASTE_VEHICLE_ID_HERE
+@stationId       = PASTE_STATION_ID_HERE
+@sessionId       = PASTE_SESSION_ID_HERE
+@razorpayOrderId = PASTE_ORDER_ID_FROM_INITIATE
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HEALTH
+# ═══════════════════════════════════════════════════════════════════════════
+
+### 1. Health check
+GET {{base}}/health
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUTH
+# ═══════════════════════════════════════════════════════════════════════════
+
+### 2. Send OTP  →  { expiresAt } for countdown timer
+POST {{base}}/api/auth/send-otp
+Content-Type: application/json
+
+{
+  "phone": "{{phone}}"
+}
+
+###
+
+### 3. Verify OTP  →  paste { token } into @token above
+POST {{base}}/api/auth/verify-otp
+Content-Type: application/json
+
+{
+  "phone": "{{phone}}",
+  "otp": "ENTER_6_DIGIT_OTP"
+}
+
+###
+
+### 4. Logout
+POST {{base}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PROFILE
+# ═══════════════════════════════════════════════════════════════════════════
+
+### 5. Get full profile + vehicles
+GET {{base}}/api/profile
+Authorization: Bearer {{token}}
+
+###
+
+### 6. Create profile  (one-time; 409 if already done)
+POST {{base}}/api/profile
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Pratyaksh Pandey",
+  "email": "test@example.com",
+  "city": "Bengaluru",
+  "gender": "male",
+  "preferredConnector": "CCS2",
+  "preferredSpeed": "DC Fast",
+  "vehicle": {
+    "brand": "Tata",
+    "model": "Nexon EV",
+    "type": "BEV",
+    "batteryKWh": 40.5,
+    "rangeKm": 465,
+    "connector": "CCS2",
+    "plateNumber": "KA01AB1234"
+  }
+}
+
+###
+
+### 7. Update profile
+PUT {{base}}/api/profile
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "city": "Mumbai",
+  "preferredSpeed": "Ultra Fast"
+}
+
+###
+
+### 8. Stats  (real session aggregation)
+GET {{base}}/api/profile/stats
+Authorization: Bearer {{token}}
+
+###
+
+### 9. Delete account  (soft-delete — uncomment only if you mean it)
+# DELETE {{base}}/api/profile
+# Authorization: Bearer {{token}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VEHICLES
+# ═══════════════════════════════════════════════════════════════════════════
+
+### 10. List vehicles
+GET {{base}}/api/profile/vehicles
+Authorization: Bearer {{token}}
+
+###
+
+### 11. Add a second vehicle
+POST {{base}}/api/profile/vehicles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "brand": "MG",
+  "model": "ZS EV",
+  "type": "BEV",
+  "batteryKWh": 50.3,
+  "rangeKm": 461,
+  "connector": "CCS2",
+  "plateNumber": "KA05CD5678"
+}
+
+###
+
+### 12. Update vehicle
+PUT {{base}}/api/profile/vehicles/{{vehicleId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "rangeKm": 480,
+  "plateNumber": "KA01ZZ9999"
+}
+
+###
+
+### 13. Set as primary
+PATCH {{base}}/api/profile/vehicles/{{vehicleId}}/primary
+Authorization: Bearer {{token}}
+
+###
+
+### 14. Delete vehicle
+DELETE {{base}}/api/profile/vehicles/{{vehicleId}}
+Authorization: Bearer {{token}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# WALLET
+# ═══════════════════════════════════════════════════════════════════════════
+
+### 15. Get wallet balance + last 10 transactions
+GET {{base}}/api/wallet
+Authorization: Bearer {{token}}
+
+###
+
+### 16. Initiate top-up  →  creates Razorpay order; paste orderId into @razorpayOrderId above
+POST {{base}}/api/wallet/topup/initiate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amount": 500
+}
+
+###
+
+### 16b. Verify top-up  →  call after Razorpay checkout succeeds; credits wallet
+# razorpaySignature comes from the Razorpay checkout callback
+POST {{base}}/api/wallet/topup/verify
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "razorpayOrderId":   "{{razorpayOrderId}}",
+  "razorpayPaymentId": "pay_PASTE_PAYMENT_ID",
+  "razorpaySignature": "PASTE_SIGNATURE_FROM_CHECKOUT"
+}
+
+###
+
+### 17. Full transaction history  (paginated)
+GET {{base}}/api/wallet/transactions?page=1&limit=20
+Authorization: Bearer {{token}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CHARGING STATIONS
+# ═══════════════════════════════════════════════════════════════════════════
+
+### 18. Nearby stations  →  paste a stationId + chargerId into vars above
+# Coordinates: Bellandur, Bengaluru
+GET {{base}}/api/stations/nearby?lat=12.9352&lng=77.6245&radius=5000
+Authorization: Bearer {{token}}
+
+###
+
+### 19. Nearby — filter by connector + type
+GET {{base}}/api/stations/nearby?lat=12.9352&lng=77.6245&radius=10000&connector=CCS2&type=DC Fast
+Authorization: Bearer {{token}}
+
+###
+
+### 20. Station detail
+GET {{base}}/api/stations/{{stationId}}
+Authorization: Bearer {{token}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CHARGING SESSIONS
+# ═══════════════════════════════════════════════════════════════════════════
+
+### 21. Start charging session
+# Prerequisites: wallet ≥ ₹50, charger must be 'available'
+POST {{base}}/api/sessions/start
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "stationId": "{{stationId}}",
+  "chargerId": "CO-EB-0012",
+  "targetSocPercent": 80,
+  "startSocPercent": 22
+}
+
+###
+
+### 22. Live session data  (poll every ~5s while session is active)
+# Returns { live: { currentSocPercent, currentPowerKw, timeElapsed, energyDeliveredKwh,
+#                   estimatedCostRs, estimatedRangeKm, fuelSavingsRs }, connectorStatus }
+GET {{base}}/api/sessions/{{sessionId}}
+Authorization: Bearer {{token}}
+
+###
+
+### 23. Stop charging  →  finalizes cost, deducts wallet, creates transaction
+PATCH {{base}}/api/sessions/{{sessionId}}/stop
+Authorization: Bearer {{token}}
+
+###
+
+### 24. Session history (Trips tab)
+GET {{base}}/api/sessions?page=1&limit=20
+Authorization: Bearer {{token}}
+
+###
+
+### 25. Session history — completed only
+GET {{base}}/api/sessions?status=completed&page=1&limit=20
+Authorization: Bearer {{token}}
